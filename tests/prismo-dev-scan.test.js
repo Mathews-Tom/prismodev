@@ -230,6 +230,39 @@ test("scan reports coding-agent readiness, optimization stack, tool-output risk,
   assert.equal(payload.agentReadiness.codex.exactProxyTracking, "available-when-using-api-key-base-url-mode");
 });
 
+test("ignore matcher covers generated directories, globs, lockfiles, and high-risk walks", () => {
+  const root = tempRepo();
+  fs.writeFileSync(path.join(root, ".gitignore"), "dist/\n*.log\n", "utf8");
+  fs.writeFileSync(path.join(root, ".claudeignore"), "/build/\n", "utf8");
+  fs.writeFileSync(path.join(root, ".cursorignore"), "frontend/dist/\n", "utf8");
+  fs.mkdirSync(path.join(root, "dist"), { recursive: true });
+  fs.mkdirSync(path.join(root, "build"), { recursive: true });
+  fs.mkdirSync(path.join(root, "frontend", "dist"), { recursive: true });
+  fs.mkdirSync(path.join(root, "node_modules", "pkg"), { recursive: true });
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(path.join(root, "dist", "app.js"), "console.log('generated');\n", "utf8");
+  fs.writeFileSync(path.join(root, "build", "app.js"), "console.log('generated');\n", "utf8");
+  fs.writeFileSync(path.join(root, "frontend", "dist", "app.js"), "console.log('generated');\n", "utf8");
+  fs.writeFileSync(path.join(root, "node_modules", "pkg", "index.js"), "module.exports = true;\n", "utf8");
+  fs.writeFileSync(path.join(root, "src", "app.js"), "export const app = true;\n", "utf8");
+  fs.writeFileSync(path.join(root, "debug.log"), "x".repeat(650 * 1024), "utf8");
+  fs.writeFileSync(path.join(root, "package-lock.json"), "x".repeat(650 * 1024), "utf8");
+
+  const result = scanRepo(root);
+  const byPath = new Map(result.largeFiles.map((file) => [file.path, file]));
+
+  assert.equal(result.highRiskDirs.find((dir) => dir.path === "dist").exposed, false);
+  assert.equal(result.highRiskDirs.find((dir) => dir.path === "build").exposed, false);
+  assert.equal(result.highRiskDirs.find((dir) => dir.path === "frontend/dist").exposed, false);
+  assert.equal(result.highRiskDirs.find((dir) => dir.path === "node_modules").exposed, true);
+  assert.equal(result.files.some((file) => file.path === "node_modules/pkg/index.js"), false);
+  assert.equal(result.files.some((file) => file.path === "src/app.js" && file.kind === "source"), true);
+  assert.equal(byPath.get("debug.log").kind, "log");
+  assert.equal(byPath.get("debug.log").ignored, true);
+  assert.equal(byPath.get("package-lock.json").kind, "lock/generated");
+  assert.equal(result.exposedLargeFiles.some((file) => file.path === "debug.log"), false);
+});
+
 test("optimize generates AI-readable context files in .prismo", () => {
   const root = tempRepo();
   fs.mkdirSync(path.join(root, "frontend", "src", "app"), { recursive: true });
