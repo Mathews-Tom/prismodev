@@ -24,7 +24,7 @@ test("flags oversized CLAUDE.md, missing .claudeignore, bloat dirs, and large fi
   assert.ok(result.score < 100);
   assert.ok(result.issues.some((issue) => issue.title.includes("CLAUDE.md")));
   assert.ok(result.issues.some((issue) => issue.title.includes(".claudeignore")));
-  assert.ok(result.issues.every((issue) => issue.severity && issue.category && issue.description && issue.recommendation));
+  assert.ok(result.issues.every((issue) => issue.severity && issue.category && issue.scope && issue.confidence && issue.description && issue.recommendation));
   assert.ok(result.exposedHighRiskDirs.some((dir) => dir.path === "node_modules"));
   assert.ok(result.exposedLargeFiles.some((file) => file.path === "large.json"));
 });
@@ -191,10 +191,14 @@ test("scan reports coding-agent readiness, optimization stack, tool-output risk,
   assert.equal(result.toolOutputRisk.level !== "Low", true);
   assert.ok(result.issues.some((issue) => issue.title.includes("Tool output risk")));
   assert.equal(payload.claudeFindings.projectMcpServers, 2);
+  assert.equal(payload.claudeFindings.projectConfidence, "repo-heuristic");
+  assert.equal(payload.claudeFindings.globalConfidence, "environment-heuristic");
   assert.equal(payload.claudeFindings.projectHooks, 1);
   assert.equal(payload.claudeFindings.project.files.includes(".claude/settings.json"), true);
   assert.equal(payload.claudeFindings.mcpServers >= payload.claudeFindings.projectMcpServers, true);
   assert.equal(payload.codexFindings.projectMcpServers, 1);
+  assert.equal(payload.codexFindings.projectConfidence, "repo-heuristic");
+  assert.equal(payload.codexFindings.globalConfidence, "environment-heuristic");
   assert.equal(payload.codexFindings.project.files.includes(".codex/config.toml"), true);
   assert.equal(payload.codexFindings.mcpServers >= payload.codexFindings.projectMcpServers, true);
   assert.equal(payload.proxyTrackingReadiness.exactApiTracking.available, true);
@@ -659,7 +663,7 @@ test("scan --usage folds exact local session usage into diagnostics", () => {
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.realUsage.totals.displayTokens, 1250000);
   assert.equal(payload.realUsage.confidence, "exact-local-log");
-  assert.ok(payload.issues.some((issue) => issue.title.includes("Recent local AI sessions used")));
+  assert.ok(payload.issues.some((issue) => issue.title.includes("Recent local AI sessions used") && issue.scope === "session" && issue.confidence === "exact-local-log"));
   assert.ok(payload.recommendations.some((rec) => rec.includes("real session usage")));
 });
 
