@@ -392,6 +392,35 @@ test("optimize --json outputs valid JSON only", () => {
   assert.equal(result.stdout.trim().startsWith("{"), true);
 });
 
+test("optimize --dry-run previews generated files without writing them", () => {
+  const root = tempRepo();
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { express: "4.0.0" } }), "utf8");
+
+  const terminal = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "..", "bin", "prismo.js"), "optimize", "--dry-run", root],
+    { encoding: "utf8" }
+  );
+
+  assert.equal(terminal.status, 0, terminal.stderr);
+  assert.ok(terminal.stdout.includes("Would Generate:"));
+  assert.ok(terminal.stdout.includes("[dry-run] .prismo/architecture-summary.md"));
+  assert.equal(fs.existsSync(path.join(root, ".prismo")), false);
+
+  const json = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "..", "bin", "prismo.js"), "optimize", "--dry-run", "--json", root],
+    { encoding: "utf8" }
+  );
+
+  assert.equal(json.status, 0, json.stderr);
+  const payload = JSON.parse(json.stdout);
+  assert.equal(payload.dryRun, true);
+  assert.ok(payload.generatedFiles.includes(".prismo/architecture-summary.md"));
+  assert.equal(json.stdout.trim().startsWith("{"), true);
+  assert.equal(fs.existsSync(path.join(root, ".prismo")), false);
+});
+
 test("context command prints copy-pasteable prompt", () => {
   const root = tempRepo();
   fs.mkdirSync(path.join(root, "frontend", "src", "app"), { recursive: true });
