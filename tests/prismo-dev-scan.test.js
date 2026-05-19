@@ -118,6 +118,28 @@ test("existing .claudeignore creates .claudeignore.prismo-suggested instead of o
   assert.ok(actions.some((action) => action.includes(".cursorignore.prismo-suggested")));
 });
 
+test("repo hygiene keeps generated PrismoDev artifacts local-only", () => {
+  const gitignore = fs.readFileSync(path.join(__dirname, "..", ".gitignore"), "utf8");
+  const contributing = fs.readFileSync(path.join(__dirname, "..", "CONTRIBUTING.md"), "utf8");
+  const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+  const ignoredArtifacts = [
+    ".prismo/",
+    ".claudeignore.prismo-suggested",
+    ".cursorignore.prismo-suggested",
+    "prismo-optimized-CLAUDE.template.md",
+    "*.bak",
+    "/.cocoindex_code/",
+  ];
+
+  for (const artifact of ignoredArtifacts) {
+    assert.ok(gitignore.includes(artifact), `${artifact} missing from .gitignore`);
+    assert.ok(contributing.includes(artifact.replace(/^\//, "")), `${artifact} missing from CONTRIBUTING.md`);
+  }
+  assert.equal(packageJson.files.includes(".prismo/"), false);
+  assert.equal(packageJson.files.includes(".cocoindex_code/"), false);
+  assert.equal(packageJson.files.includes("prismo-optimized-CLAUDE.template.md"), false);
+});
+
 test("CLAUDE.md token estimate produces deterministic impact text and template", () => {
   const root = tempRepo();
   fs.writeFileSync(path.join(root, "CLAUDE.md"), "a".repeat(8000), "utf8");

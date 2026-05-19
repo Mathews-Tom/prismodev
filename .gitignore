@@ -198,3 +198,16 @@ static_collected/
 
 # Claude Code
 .claude/worktrees/
+.claudeignore
+.claudeignore.prismo-suggested
+.cursorignore.prismo-suggested
+
+# PrismoDev generated outputs
+.prismo/
+prismo-optimized-CLAUDE.template.md
+
+# Internal working docs
+.docs/
+
+# CocoIndex Code (ccc)
+/.cocoindex_code/
