@@ -347,6 +347,34 @@ test("ignore matcher covers generated directories, globs, lockfiles, and high-ri
   assert.equal(result.exposedLargeFiles.some((file) => file.path === "debug.log"), false);
 });
 
+test("scanner classifies local database files as binary without hiding noisy text artifacts", () => {
+  const root = tempRepo();
+  fs.writeFileSync(path.join(root, ".gitignore"), ".cocoindex_code/\n*.sqlite3\n", "utf8");
+  fs.mkdirSync(path.join(root, ".cocoindex_code", "cocoindex.db", "mdb"), { recursive: true });
+  fs.writeFileSync(path.join(root, ".cocoindex_code", "cocoindex.db", "mdb", "data.mdb"), Buffer.alloc(650 * 1024, 1));
+  fs.writeFileSync(path.join(root, "local.sqlite3"), Buffer.alloc(650 * 1024, 1));
+  fs.writeFileSync(path.join(root, "large.json"), `{ "data": "${"x".repeat(650 * 1024)}" }`, "utf8");
+  fs.writeFileSync(path.join(root, "debug.log"), "x".repeat(650 * 1024), "utf8");
+  fs.writeFileSync(path.join(root, "session.trace"), "x".repeat(650 * 1024), "utf8");
+  fs.writeFileSync(path.join(root, "network.har"), "x".repeat(650 * 1024), "utf8");
+
+  const result = scanRepo(root);
+  const filesByPath = new Map(result.files.map((file) => [file.path, file]));
+  const largeByPath = new Map(result.largeFiles.map((file) => [file.path, file]));
+
+  assert.equal(filesByPath.get(".cocoindex_code/cocoindex.db/mdb/data.mdb").kind, "binary");
+  assert.equal(filesByPath.get(".cocoindex_code/cocoindex.db/mdb/data.mdb").ignored, true);
+  assert.equal(filesByPath.get("local.sqlite3").kind, "binary");
+  assert.equal(result.largeFiles.some((file) => file.path.endsWith("data.mdb")), false);
+  assert.equal(result.exposedLargeFiles.some((file) => file.path.endsWith("data.mdb")), false);
+  assert.equal(largeByPath.get("large.json").kind, "json");
+  assert.equal(largeByPath.get("debug.log").kind, "log");
+  assert.equal(largeByPath.get("session.trace").kind, "text");
+  assert.equal(largeByPath.get("network.har").kind, "text");
+  assert.equal(result.exposedLargeFiles.some((file) => file.path === "large.json"), true);
+  assert.equal(result.exposedLargeFiles.some((file) => file.path === "debug.log"), true);
+});
+
 test("optimize generates AI-readable context files in .prismo", () => {
   const root = tempRepo();
   fs.mkdirSync(path.join(root, "frontend", "src", "app"), { recursive: true });
