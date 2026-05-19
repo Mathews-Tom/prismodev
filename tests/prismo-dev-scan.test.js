@@ -947,6 +947,37 @@ test("command-specific help and demo mode are available", () => {
   assert.ok(demo.stdout.includes("Try it on your repo"));
 });
 
+test("feedback command prints local-only packet and JSON template", () => {
+  const root = tempRepo();
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { express: "4.0.0" } }), "utf8");
+
+  const terminal = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "..", "bin", "prismo.js"), "feedback", root],
+    { encoding: "utf8" }
+  );
+
+  assert.equal(terminal.status, 0, terminal.stderr);
+  assert.ok(terminal.stdout.includes("PrismoDev Feedback Packet"));
+  assert.ok(terminal.stdout.includes("Repo type: Node.js"));
+  assert.ok(terminal.stdout.includes("- scan --usage --no-report:"));
+  assert.ok(terminal.stdout.includes("Expected next:"));
+
+  const json = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "..", "bin", "prismo.js"), "feedback", "--json", root],
+    { encoding: "utf8" }
+  );
+
+  assert.equal(json.status, 0, json.stderr);
+  assert.equal(json.stdout.trim().startsWith("{"), true);
+  const payload = JSON.parse(json.stdout);
+  assert.equal(payload.schemaVersion, 1);
+  assert.equal(payload.command, "feedback");
+  assert.equal(payload.repoType, "Node.js");
+  assert.equal(payload.fields.commandsCompleted.setup, "");
+});
+
 test("dev command runs guided scan, optimize, and prompt flow", () => {
   const root = tempRepo();
   const codexHome = tempRepo();

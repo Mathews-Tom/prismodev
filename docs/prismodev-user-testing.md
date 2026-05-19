@@ -30,6 +30,7 @@ Ask each tester to run these from a real project root:
 npx getprismo@0.1.5 scan --usage --no-report
 npx getprismo@0.1.5 setup
 npx getprismo@0.1.5 watch --once
+npx getprismo@0.1.5 feedback
 ```
 
 Optional follow-up if they find useful issues:
@@ -54,6 +55,7 @@ Could you run these three commands from a real repo and send me a screenshot or 
 npx getprismo@0.1.5 scan --usage --no-report
 npx getprismo@0.1.5 setup
 npx getprismo@0.1.5 watch --once
+npx getprismo@0.1.5 feedback
 
 I’m mainly trying to learn whether the output is useful enough for developers who use Codex, Claude Code, or Cursor.
 ```
@@ -67,6 +69,7 @@ For each tester, record:
 - Did all three commands run without help?
 - Did local logs show up?
 - Did `watch --once` show a useful active session?
+- Did `feedback` give them a packet they could fill out quickly?
 - Did they understand exact proxy tracking vs local session estimates?
 - Most surprising/useful output
 - Most confusing output
@@ -109,6 +112,13 @@ What should PrismoDev do next?
 - other
 
 Screenshot/output notes:
+```
+
+Testers can generate the same template locally:
+
+```bash
+npx getprismo@0.1.5 feedback
+npx getprismo@0.1.5 feedback --json
 ```
 
 ## Success Criteria
