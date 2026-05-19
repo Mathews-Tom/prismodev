@@ -5,11 +5,21 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const test = require("node:test");
 
-const { applyFixes, getUsageSummary, scanRepo, toJsonPayload, writeReport } = require("../lib/prismo-dev-scan");
+const { analyzeSessionFile, applyFixes, getUsageSummary, scanRepo, toJsonPayload, writeReport } = require("../lib/prismo-dev-scan");
 const { parseCli, parseScopeAndTarget, parseTokenBudget } = require("../lib/prismo-dev/cli-parse");
 
 function tempRepo() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "prismo-dev-scan-"));
+}
+
+function writeFixture(targetPath, fixtureRelPath, replacements = {}) {
+  const fixturePath = path.join(__dirname, "fixtures", fixtureRelPath);
+  let text = fs.readFileSync(fixturePath, "utf8");
+  for (const [key, value] of Object.entries(replacements)) {
+    text = text.replaceAll(`__${key}__`, value);
+  }
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, text, "utf8");
 }
 
 test("CLI parser normalizes flags, values, scope, target, and token budgets", () => {
@@ -353,10 +363,7 @@ test("usage command reads exact Codex token_count events from local JSONL", () =
   fs.mkdirSync(sessionDir, { recursive: true });
   fs.mkdirSync(path.join(root, "src"), { recursive: true });
   fs.writeFileSync(path.join(root, "src", "real.js"), "export const real = true;\n", "utf8");
-  fs.writeFileSync(path.join(sessionDir, "rollout-test.jsonl"), [
-    JSON.stringify({ type: "event_msg", timestamp: "2026-05-08T10:00:00Z", payload: { type: "session_meta", id: "codex-test", cwd: root, model: "gpt-test" } }),
-    JSON.stringify({ type: "event_msg", timestamp: "2026-05-08T10:01:00Z", payload: { type: "token_count", info: { total_token_usage: { input_tokens: 1000, cached_input_tokens: 200, output_tokens: 300, total_tokens: 1500 } } } }),
-  ].join("\n"), "utf8");
+  writeFixture(path.join(sessionDir, "rollout-test.jsonl"), "codex/token-count-basic.jsonl", { ROOT: root });
 
   const result = spawnSync(
     process.execPath,
@@ -379,26 +386,7 @@ test("usage summary reads exact Claude Code message usage from local JSONL", () 
   const safeProject = root.replace(/[\/\\:]/g, "-").replace(/^-/, "-");
   const projectDir = path.join(claudeHome, "projects", safeProject);
   fs.mkdirSync(projectDir, { recursive: true });
-  fs.writeFileSync(path.join(projectDir, "claude-test.jsonl"), [
-    JSON.stringify({ type: "user", timestamp: "2026-05-08T10:00:00Z", cwd: root, message: { role: "user", content: "hello" } }),
-    JSON.stringify({
-      type: "assistant",
-      timestamp: "2026-05-08T10:01:00Z",
-      requestId: "req-1",
-      message: {
-        id: "msg-1",
-        role: "assistant",
-        model: "claude-test",
-        usage: {
-          input_tokens: 10,
-          cache_creation_input_tokens: 20,
-          cache_read_input_tokens: 30,
-          output_tokens: 40,
-        },
-        content: [{ type: "text", text: "done" }],
-      },
-    }),
-  ].join("\n"), "utf8");
+  writeFixture(path.join(projectDir, "claude-test.jsonl"), "claude/usage-basic.jsonl", { ROOT: root });
 
   const originalClaudeHome = process.env.PRISMO_CLAUDE_HOME;
   const originalCodexHome = process.env.PRISMO_CODEX_HOME;
@@ -416,6 +404,46 @@ test("usage summary reads exact Claude Code message usage from local JSONL", () 
     if (originalCodexHome === undefined) delete process.env.PRISMO_CODEX_HOME;
     else process.env.PRISMO_CODEX_HOME = originalCodexHome;
   }
+});
+
+test("log parser fixtures cover partial rows, estimated sessions, and missing cwd filtering", () => {
+  const root = tempRepo();
+  const otherRoot = tempRepo();
+  const codexHome = tempRepo();
+  const claudeHome = tempRepo();
+  const sessionDir = path.join(codexHome, "sessions", "2026", "05", "08");
+  const safeProject = root.replace(/[\/\\:]/g, "-").replace(/^-/, "-");
+  const projectDir = path.join(claudeHome, "projects", safeProject);
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src", "real.js"), "export const real = true;\n", "utf8");
+
+  const partialCodex = path.join(sessionDir, "partial-write.jsonl");
+  const missingCwdCodex = path.join(sessionDir, "missing-cwd.jsonl");
+  const estimatedClaude = path.join(projectDir, "no-usage-fields.jsonl");
+  writeFixture(partialCodex, "codex/partial-write.jsonl", { ROOT: root });
+  writeFixture(missingCwdCodex, "codex/missing-cwd.jsonl");
+  writeFixture(estimatedClaude, "claude/no-usage-fields.jsonl", { ROOT: root });
+
+  const partial = analyzeSessionFile(partialCodex, "codex");
+  assert.equal(partial.cwd, root);
+  assert.equal(partial.exactAvailable, false);
+  assert.equal(partial.confidence, "estimated-local-log");
+  assert.ok(partial.displayTokens > 0);
+
+  const claude = analyzeSessionFile(estimatedClaude, "claude-code");
+  assert.equal(claude.exactAvailable, false);
+  assert.equal(claude.confidence, "estimated-local-log");
+  assert.ok(claude.displayTokens > 0);
+
+  const env = { ...process.env, PRISMO_CODEX_HOME: codexHome, PRISMO_CLAUDE_HOME: claudeHome };
+  const result = spawnSync(
+    process.execPath,
+    [path.join(__dirname, "..", "bin", "prismo.js"), "usage", "codex", "--json", "--limit", "5", otherRoot],
+    { encoding: "utf8", env }
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.sessions.some((session) => session.sessionId === "codex-fixture-missing-cwd"), false);
 });
 
 test("cc command reports Claude Code token costs and cache savings", () => {
@@ -662,11 +690,14 @@ test("scan --usage folds exact local session usage into diagnostics", () => {
   const codexHome = tempRepo();
   const sessionDir = path.join(codexHome, "sessions", "2026", "05", "08");
   fs.mkdirSync(sessionDir, { recursive: true });
-  fs.writeFileSync(path.join(sessionDir, "rollout-test.jsonl"), JSON.stringify({
-    type: "event_msg",
-    timestamp: "2026-05-08T10:01:00Z",
-    payload: { type: "token_count", info: { total_token_usage: { input_tokens: 1200000, output_tokens: 50000, total_tokens: 1250000 } } },
-  }), "utf8");
+  fs.writeFileSync(path.join(sessionDir, "rollout-test.jsonl"), [
+    JSON.stringify({ type: "event_msg", timestamp: "2026-05-08T10:00:00Z", payload: { type: "session_meta", cwd: root } }),
+    JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-05-08T10:01:00Z",
+      payload: { type: "token_count", info: { total_token_usage: { input_tokens: 1200000, output_tokens: 50000, total_tokens: 1250000 } } },
+    }),
+  ].join("\n"), "utf8");
 
   const result = spawnSync(
     process.execPath,
@@ -750,11 +781,14 @@ test("dev command runs guided scan, optimize, and prompt flow", () => {
   fs.writeFileSync(path.join(root, "src", "app", "page.tsx"), "export default function Page() { return null }\n", "utf8");
   const sessionDir = path.join(codexHome, "sessions", "2026", "05", "08");
   fs.mkdirSync(sessionDir, { recursive: true });
-  fs.writeFileSync(path.join(sessionDir, "rollout-test.jsonl"), JSON.stringify({
-    type: "event_msg",
-    timestamp: "2026-05-08T10:01:00Z",
-    payload: { type: "token_count", info: { total_token_usage: { input_tokens: 1000, output_tokens: 200, total_tokens: 1200 } } },
-  }), "utf8");
+  fs.writeFileSync(path.join(sessionDir, "rollout-test.jsonl"), [
+    JSON.stringify({ type: "event_msg", timestamp: "2026-05-08T10:00:00Z", payload: { type: "session_meta", cwd: root } }),
+    JSON.stringify({
+      type: "event_msg",
+      timestamp: "2026-05-08T10:01:00Z",
+      payload: { type: "token_count", info: { total_token_usage: { input_tokens: 1000, output_tokens: 200, total_tokens: 1200 } } },
+    }),
+  ].join("\n"), "utf8");
 
   const result = spawnSync(
     process.execPath,

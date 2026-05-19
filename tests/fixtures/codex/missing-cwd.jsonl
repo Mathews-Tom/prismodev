@@ -1,0 +1,2 @@
+{"type":"event_msg","timestamp":"2026-05-08T10:00:00Z","payload":{"type":"session_meta","id":"codex-fixture-missing-cwd","model":"gpt-test"}}
+{"type":"event_msg","timestamp":"2026-05-08T10:01:00Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"output_tokens":500,"total_tokens":1500}}}}
