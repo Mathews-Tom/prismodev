@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-05-08T10:00:00Z","cwd":"__ROOT__","message":{"role":"user","content":"Please inspect src/real.js and explain the failure."}}
+{"type":"assistant","timestamp":"2026-05-08T10:01:00Z","message":{"id":"msg-1","role":"assistant","model":"claude-test","content":[{"type":"text","text":"The failure is in src/real.js. Run npm test after the fix."}]}}
