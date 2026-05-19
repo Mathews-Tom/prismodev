@@ -188,6 +188,42 @@ test("--json prints valid JSON only with expected keys", () => {
   assert.equal(result.stdout.trim().startsWith("{"), true);
 });
 
+test("major JSON commands keep stable machine-readable contracts", () => {
+  const root = tempRepo();
+  const codexHome = tempRepo();
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ dependencies: { express: "4.0.0" } }), "utf8");
+  const sessionDir = path.join(codexHome, "sessions", "2026", "05", "08");
+  writeFixture(path.join(sessionDir, "rollout-test.jsonl"), "codex/token-count-basic.jsonl", { ROOT: root });
+  const env = { ...process.env, PRISMO_CODEX_HOME: codexHome, PRISMO_CLAUDE_HOME: path.join(root, "none") };
+  const commands = {
+    scan: ["scan", "--json", "--no-report", root],
+    doctor: ["doctor", "--json", "--dry-run", root],
+    watch: ["watch", "codex", "--once", "--json", "--limit", "1", root],
+    setup: ["setup", "--json", "--skip-proxy-check", root],
+    context: ["context", "--json", root],
+    optimize: ["optimize", "--json", root],
+  };
+  const payloads = {};
+
+  for (const [name, args] of Object.entries(commands)) {
+    const result = spawnSync(process.execPath, [path.join(__dirname, "..", "bin", "prismo.js"), ...args], { encoding: "utf8", env });
+    assert.equal(result.status, 0, `${name} stderr: ${result.stderr}`);
+    assert.equal(result.stdout.trim().startsWith("{"), true, `${name} did not write JSON object first`);
+    payloads[name] = JSON.parse(result.stdout);
+    assert.equal(payloads[name].schemaVersion, 1, `${name} schemaVersion`);
+  }
+
+  assert.ok(Array.isArray(payloads.scan.issues));
+  assert.ok(payloads.scan.issues.every((issue) => issue.scope && issue.confidence));
+  assert.ok(Array.isArray(payloads.doctor.fixActions));
+  assert.ok(Array.isArray(payloads.watch.sessions));
+  assert.ok(payloads.watch.live);
+  assert.equal(payloads.setup.prismoProxy.skipped, true);
+  assert.ok(payloads.context.prompt.includes("Use Prismo's compact repo context"));
+  assert.ok(Array.isArray(payloads.optimize.generatedFiles));
+  assert.ok(payloads.optimize.generatedFiles.length > 0);
+});
+
 test("scan --simple prints plain-English output and does not write a report", () => {
   const root = tempRepo();
   fs.writeFileSync(path.join(root, "CLAUDE.md"), "Use concise instructions.\n".repeat(50), "utf8");
