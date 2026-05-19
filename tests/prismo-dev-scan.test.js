@@ -7,6 +7,7 @@ const test = require("node:test");
 
 const { analyzeSessionFile, applyFixes, getUsageSummary, scanRepo, toJsonPayload, writeReport } = require("../lib/prismo-dev-scan");
 const { parseCli, parseScopeAndTarget, parseTokenBudget } = require("../lib/prismo-dev/cli-parse");
+const { getTopTokenLeaks, scoreScan, severityRank, severityWeight } = require("../lib/prismo-dev/scoring");
 
 function tempRepo() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "prismo-dev-scan-"));
@@ -34,6 +35,31 @@ test("CLI parser normalizes flags, values, scope, target, and token budgets", ()
   assert.deepEqual(parsed.positionals, ["codex", "."]);
   assert.deepEqual(parseScopeAndTarget(["frontend", "/repo", "--limit", "3"], new Set(["--limit"])), { scope: "frontend", target: "/repo" });
   assert.equal(parseTokenBudget("600k"), 600000);
+});
+
+test("scoring module ranks severities and applies scan penalties", () => {
+  const issues = [
+    { severity: "low", title: "Low issue" },
+    { severity: "critical", title: "Critical issue" },
+    { severity: "medium", title: "Medium issue" },
+  ];
+  const score = scoreScan(
+    issues,
+    { totalFiles: 3000, exposedLargeFiles: 11, exposedHighRiskDirs: 5 },
+    {
+      toolOutputRisk: { level: "Medium" },
+      agentReadiness: { localUsageLogsAvailable: true },
+      proxyTrackingReadiness: { exactApiTracking: { available: true } },
+    }
+  );
+
+  assert.equal(severityWeight("critical"), 10);
+  assert.equal(severityWeight("unknown"), 2);
+  assert.equal(severityRank("critical") < severityRank("low"), true);
+  assert.deepEqual(getTopTokenLeaks(issues, 2), ["Critical issue", "Medium issue"]);
+  assert.equal(score.score, 73);
+  assert.equal(score.risk, "Medium");
+  assert.equal(score.avoidableWaste, "20-40%");
 });
 
 test("flags oversized CLAUDE.md, missing .claudeignore, bloat dirs, and large files", () => {
