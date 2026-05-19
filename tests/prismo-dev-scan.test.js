@@ -6,10 +6,25 @@ const { spawnSync } = require("child_process");
 const test = require("node:test");
 
 const { applyFixes, getUsageSummary, scanRepo, toJsonPayload, writeReport } = require("../lib/prismo-dev-scan");
+const { parseCli, parseScopeAndTarget, parseTokenBudget } = require("../lib/prismo-dev/cli-parse");
 
 function tempRepo() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "prismo-dev-scan-"));
 }
+
+test("CLI parser normalizes flags, values, scope, target, and token budgets", () => {
+  const parsed = parseCli(["watch", "codex", "--once", "--json", "--limit", "2", "--interval", "4", "--budget", "1.2m", "."]);
+
+  assert.equal(parsed.command, "watch");
+  assert.equal(parsed.flags.json, true);
+  assert.equal(parsed.flags.once, true);
+  assert.equal(parsed.values.limit, "2");
+  assert.equal(parsed.values.intervalMs, 4000);
+  assert.equal(parsed.values.tokenBudget, 1200000);
+  assert.deepEqual(parsed.positionals, ["codex", "."]);
+  assert.deepEqual(parseScopeAndTarget(["frontend", "/repo", "--limit", "3"], new Set(["--limit"])), { scope: "frontend", target: "/repo" });
+  assert.equal(parseTokenBudget("600k"), 600000);
+});
 
 test("flags oversized CLAUDE.md, missing .claudeignore, bloat dirs, and large files", () => {
   const root = tempRepo();
