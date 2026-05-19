@@ -25,3 +25,18 @@ provider credentials, or customer data fixtures.
 - Add or update tests for scanner behavior.
 - Avoid network calls in scanner paths unless the command explicitly opts in.
 - Do not commit generated reports, `.prismo/` output, local logs, or secrets.
+
+## Generated Local Artifacts
+
+Keep generated PrismoDev and agent-workflow files local. Do not commit:
+
+- `.prismo/`
+- `.claudeignore.prismo-suggested`
+- `.cursorignore.prismo-suggested`
+- `prismo-optimized-CLAUDE.template.md`
+- `*.bak`
+- `.cocoindex_code/`
+
+The npm package `files` allowlist should stay limited to source, docs, and
+package metadata. Generated outputs should not be added to published package
+contents.
