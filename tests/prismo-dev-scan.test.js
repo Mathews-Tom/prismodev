@@ -187,8 +187,16 @@ test("scan reports coding-agent readiness, optimization stack, tool-output risk,
   assert.equal(result.agentReadiness.codex.detected, true);
   assert.equal(result.optimizationStack.tools.rtk.detected, true);
   assert.equal(result.optimizationStack.claudeMcpServers, 2);
+  assert.equal(result.optimizationStack.totalClaudeMcpServers >= result.optimizationStack.claudeMcpServers, true);
   assert.equal(result.toolOutputRisk.level !== "Low", true);
   assert.ok(result.issues.some((issue) => issue.title.includes("Tool output risk")));
+  assert.equal(payload.claudeFindings.projectMcpServers, 2);
+  assert.equal(payload.claudeFindings.projectHooks, 1);
+  assert.equal(payload.claudeFindings.project.files.includes(".claude/settings.json"), true);
+  assert.equal(payload.claudeFindings.mcpServers >= payload.claudeFindings.projectMcpServers, true);
+  assert.equal(payload.codexFindings.projectMcpServers, 1);
+  assert.equal(payload.codexFindings.project.files.includes(".codex/config.toml"), true);
+  assert.equal(payload.codexFindings.mcpServers >= payload.codexFindings.projectMcpServers, true);
   assert.equal(payload.proxyTrackingReadiness.exactApiTracking.available, true);
   assert.equal(payload.agentReadiness.codex.exactProxyTracking, "available-when-using-api-key-base-url-mode");
 });
